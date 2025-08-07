@@ -56,6 +56,7 @@ MIDDLEWARE = [
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "https://blogs-fe.onrender.com",
 ]
 
 ROOT_URLCONF = 'BE_BLOG.urls'
