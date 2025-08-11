@@ -47,7 +47,10 @@ class Blog(models.Model):
                 ("Backend", "Backend"),
                 ("Fullstack", "Fullstack"),
                 ("Design", "Design"),
-                ("Blockchain", "Blockchain")
+                ("Blockchain", "Blockchain"),
+                ("DevOps", "DevOps"),
+                ("AI", "AI"),
+                ("Other", "Other")
                 )
 
     title = models.CharField(max_length=255)
