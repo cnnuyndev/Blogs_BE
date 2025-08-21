@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / '.env')
+load_dotenv(BASE_DIR / '.env.production')
 
 
 # Quick-start development settings - unsuitable for production
@@ -165,6 +165,7 @@ EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() == 'true'
 EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'False').lower() == 'true'
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+print("EMAIL_HOST_PASSWORD: ", EMAIL_HOST_PASSWORD)
 DEFAULT_FROM_EMAIL = os.environ.get(
     'DEFAULT_FROM_EMAIL', 'noreply@gmail.com')
 EMAIL_SUBJECT_PREFIX = '[DevScribe] '
