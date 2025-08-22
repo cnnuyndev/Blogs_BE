@@ -26,7 +26,9 @@ Blog Backend API là một ứng dụng backend được xây dựng bằng Djan
 
 ### Deployment & Production
 - **Gunicorn 23.0.0** - WSGI HTTP Server cho production
-- **Build Script** - Automated deployment script
+- **Nginx** - Reverse proxy, phục vụ static và media
+- **Supervisor** - Quản lý nhiều process (Nginx + Gunicorn)
+- **Docker** - Build & deploy container
 
 ### Development Tools
 - **SQLParse 0.5.3** - SQL parsing và formatting
@@ -133,22 +135,25 @@ python manage.py runserver
 ## 🔧 Cấu hình
 
 ### Environment Variables
-Tạo file `.env` trong thư mục gốc:
+Tạo file `.env.production` ở thư mục gốc (cùng cấp `manage.py`):
 ```env
 SECRET_KEY=your-secret-key
-DEBUG=True
-ALLOWED_HOSTS=localhost,127.0.0.1
+DEBUG=False
+ALLOWED_HOSTS=localhost,127.0.0.1,your-domain.com
 CORS_ALLOWED_ORIGINS=http://localhost:5173,https://your-frontend-domain.com
 
 # Email
 DEFAULT_FROM_EMAIL=cn.nguyen.dev@gmail.com
-EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
 EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
 EMAIL_USE_TLS=True
 EMAIL_USE_SSL=False
 EMAIL_HOST_USER=your-email@gmail.com
 EMAIL_HOST_PASSWORD=your-app-password-or-smtp-key
+
+# Media (tùy chọn - nếu mount persistent path khác)
+# MEDIA_ROOT=/app/media
 ```
 
 ### CORS Configuration
@@ -163,9 +168,10 @@ CORS_ALLOWED_ORIGINS = [
 ## 📡 API Endpoints
 
 ### Authentication
-- `POST /api/register/` - Đăng ký người dùng mới
+- `POST /api/register_user/` - Đăng ký người dùng mới (tạo user is_active=False và gửi email xác thực)
+- `GET /api/verify-email/?token=...` - Xác thực email, kích hoạt tài khoản
 - `POST /api/token/` - Lấy JWT token
-- `POST /api/token/refresh/` - Refresh JWT token
+- `POST /api/token_refresh/` - Refresh JWT token
 
 ### Users
 - `GET /api/userinfo/{username}/` - Lấy thông tin người dùng
@@ -173,33 +179,60 @@ CORS_ALLOWED_ORIGINS = [
 - `PUT /api/update-profile/` - Cập nhật profile (authenticated)
 
 ### Blogs
-- `GET /api/blogs/` - Danh sách bài viết (paginated)
-- `GET /api/blogs/{slug}/` - Chi tiết bài viết theo slug
-- `POST /api/create-blog/` - Tạo bài viết mới (authenticated)
-- `PUT /api/update-blog/{id}/` - Cập nhật bài viết (authenticated)
-- `POST /api/delete-blog/{id}/` - Xóa bài viết (authenticated)
+- `GET /api/blog_list/` - Danh sách bài viết (paginated)
+- `GET /api/blogs/{slug}` - Chi tiết bài viết theo slug
+- `POST /api/create_blog/` - Tạo bài viết mới (authenticated)
+- `PUT /api/update_blog/{id}/` - Cập nhật bài viết (authenticated)
+- `POST /api/delete_blog/{id}/` - Xóa bài viết (authenticated)
 
 ## 🚀 Deployment
 
-### Sử dụng build script
+### Docker (khuyến nghị: Nginx + Gunicorn)
+
+1) Build image
 ```bash
-chmod +x build.sh
-./build.sh
+docker build -t blogs-be:latest .
 ```
 
-### Manual deployment
+2) Tạo thư mục media trên máy host
 ```bash
-pip install -r requirements.txt
-python manage.py collectstatic --no-input
-python manage.py migrate
-gunicorn BE_BLOG.wsgi:application
+# Windows PowerShell
+mkdir .\media
 ```
+
+3) Chạy container
+```powershell
+docker run -d --name blogs-be `
+  -p 8080:80 `
+  --env-file .\.env.production `
+  -v "$(Resolve-Path .\media).Path:/app/media" `
+  blogs-be:latest
+```
+
+4) Kiểm tra
+- App: http://localhost:8080/
+- Static: http://localhost:8080/static/
+- Media: http://localhost:8080/img/
+
+Ghi chú:
+- Nginx phục vụ `/static/` từ `/app/static/` (đã collectstatic trong Dockerfile) và `/img/` từ `/app/media/`.
+- Upload media được lưu ở `-v <host-media>:/app/media`.
+
+### Render.com (Deploy từ Dockerfile)
+- Tạo Web Service, nguồn là repo, chọn Deploy from Dockerfile.
+- Thiết lập Environment Variables theo `.env.production`.
+- Port: 80 (Nginx). Không cần build command riêng.
+- Media: mount Persistent Disk (nếu Render plan hỗ trợ) hoặc dùng S3 qua `django-storages`.
 
 ## 📁 Media Files
 
 Dự án hỗ trợ upload và quản lý:
 - **Blog Images**: Lưu trong `media/blog_img/`
 - **Profile Pictures**: Lưu trong `media/profile_img/`
+
+Production khuyến nghị:
+- Dùng Nginx phục vụ trực tiếp `location /img/ { alias /app/media/; }` (đã cấu hình trong `nginx.conf`).
+- Hoặc dùng S3/Cloud Storage với `django-storages` nếu bạn cần lưu trữ bền vững, scale nhiều instance.
 
 ## 🔒 Bảo mật
 
@@ -227,3 +260,25 @@ Dự án hỗ trợ upload và quản lý:
 - Django REST Framework Documentation
 - JWT Documentation
 - Pillow Documentation 
+
+## Docker quick commands
+```bash
+# Build
+docker build -t blogs-be:latest .
+
+# Run (Windows PowerShell)
+docker run -d --name blogs-be `
+  -p 8080:80 `
+  --env-file .\.env.production `
+  -v "$(Resolve-Path .\media).Path:/app/media" `
+  blogs-be:latest
+
+# Logs
+docker logs -f blogs-be
+
+# Migrate (trong container)
+docker exec -it blogs-be python manage.py migrate
+
+# Stop & remove
+docker stop blogs-be && docker rm blogs-be
+```
