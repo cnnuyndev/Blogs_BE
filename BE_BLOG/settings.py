@@ -58,10 +58,10 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
 ]
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "https://blogs-fe.onrender.com",
-]
+CORS_ALLOWED_ORIGINS = os.environ.get(
+    'CORS_ALLOWED_ORIGINS',
+    'http://localhost:5173,https://blogs-fe.onrender.com'
+).split(',')
 
 ROOT_URLCONF = 'BE_BLOG.urls'
 
