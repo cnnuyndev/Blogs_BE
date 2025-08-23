@@ -9,7 +9,6 @@ urlpatterns = [
     path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('token_refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path("register_user/", views.register_user, name="register_user"),
-    path("verify-email/", views.verify_email, name="verify_email"),
     path("create_blog/", views.create_blog, name="create_blog"),
     path("blog_list/", views.blog_list, name="blog_list"),
     path("blogs/<slug:slug>", views.get_blog, name="get_blog"),

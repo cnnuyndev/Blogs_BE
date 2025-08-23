@@ -11,25 +11,26 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
-import os
-from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+<<<<<<< HEAD
 load_dotenv(BASE_DIR / '.env.production')
+=======
+>>>>>>> parent of b418d86 (update vertify by mail when signup)
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-only-insecure-key')
+SECRET_KEY = 'django-insecure-og)nxkr#otba60ndy2bxo-yru7+4^@qlng!rxnev#%_1i9ty*6'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
+DEBUG = True
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
+ALLOWED_HOSTS = []
 
 
 # Application definition
@@ -155,20 +156,3 @@ SIMPLE_JWT = {
 
 AUTH_USER_MODEL = 'app.CustomUser'
 ALLOWED_HOSTS = ["*"]
-
-# Email settings
-EMAIL_BACKEND = os.environ.get(
-    'EMAIL_BACKEND',
-    'django.core.mail.backends.console.EmailBackend' if DEBUG else 'django.core.mail.backends.smtp.EmailBackend'
-)
-EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
-EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() == 'true'
-EMAIL_USE_SSL = os.environ.get('EMAIL_USE_SSL', 'False').lower() == 'true'
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
-DEFAULT_FROM_EMAIL = os.environ.get(
-    'DEFAULT_FROM_EMAIL', 'noreply@gmail.com')
-EMAIL_SUBJECT_PREFIX = '[DevScribe] '
-EMAIL_TIMEOUT = 5  # seconds
-EMAIL_VERIFICATION_TIMEOUT = 24 * 60 * 60  # 24 hours in seconds

@@ -141,6 +141,7 @@ SECRET_KEY=your-secret-key
 DEBUG=False
 ALLOWED_HOSTS=localhost,127.0.0.1,your-domain.com
 CORS_ALLOWED_ORIGINS=http://localhost:5173,https://your-frontend-domain.com
+<<<<<<< HEAD
 
 # Email
 DEFAULT_FROM_EMAIL=cn.nguyen.dev@gmail.com
@@ -154,6 +155,8 @@ EMAIL_HOST_PASSWORD=your-app-password-or-smtp-key
 
 # Media (tùy chọn - nếu mount persistent path khác)
 # MEDIA_ROOT=/app/media
+=======
+>>>>>>> parent of b418d86 (update vertify by mail when signup)
 ```
 
 ### CORS Configuration

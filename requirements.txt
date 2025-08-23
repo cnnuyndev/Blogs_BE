@@ -10,5 +10,8 @@ pillow==11.3.0
 PyJWT==2.10.1
 sqlparse==0.5.3
 tzdata==2025.2
+<<<<<<< HEAD
 python-dotenv==1.0.1
 whitenoise==6.7.0
+=======
+>>>>>>> parent of b418d86 (update vertify by mail when signup)
