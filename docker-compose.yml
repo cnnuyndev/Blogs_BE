@@ -1,0 +1,53 @@
+version: "3.9" # Phiên bản docker-compose file
+
+services:
+  redis:
+    image: redis:7-alpine # Redis nhẹ, phù hợp production/dev
+    command: ["redis-server", "--appendonly", "yes"] # Bật AOF để dữ liệu bền hơn
+    volumes:
+      - redis_data:/data # Lưu dữ liệu Redis ra volume
+    networks:
+      - app_net # Cùng network để service khác truy cập bằng tên "redis"
+
+  web:
+    build: . # Build image từ Dockerfile hiện tại
+    command: ["/app/entrypoint.sh"] # Script khởi động (migrate, collectstatic, gunicorn)
+    env_file:
+      - .env # Load biến môi trường từ file .env nếu có
+    environment:
+      - DEBUG=${DEBUG:-False} # Mặc định False cho production
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-*} # Nên đặt domain cụ thể ở prod
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-} # Thêm origin tin cậy để tránh lỗi CSRF
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/1} # Trỏ tới service redis trong cùng network
+      - STATIC_ROOT=/static # STATIC_ROOT trỏ đến volume /static
+      - MEDIA_ROOT=/media # MEDIA_ROOT trỏ đến volume /media
+    volumes:
+      - static_data:/static # Nơi collectstatic sẽ đẩy file tĩnh
+      - media_data:/media # Nơi Django lưu uploads
+      - .:/app # Mount mã nguồn (tiện dev; cân nhắc bỏ ở prod)
+    depends_on:
+      - redis # Chờ redis khởi động trước (theo thứ tự)
+    networks:
+      - app_net # Cho phép gọi "web:8000" từ Nginx
+
+  nginx:
+    image: nginx:1.27-alpine # Nginx nhẹ, ổn định
+    depends_on:
+      - web # Chờ app sẵn sàng trước khi proxy
+    ports:
+      - "80:80" # Publish port 80 ra bên ngoài
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro # Dùng config nginx tùy biến
+      - static_data:/static:ro # Cho Nginx đọc static trực tiếp
+      - media_data:/media:ro # Cho Nginx đọc media trực tiếp
+    networks:
+      - app_net # Giao tiếp nội bộ tới service web
+
+volumes:
+  redis_data: # Lưu dữ liệu Redis bền vững
+  static_data: # Chứa staticfiles đã collect
+  media_data: # Chứa file người dùng upload
+
+networks:
+  app_net:
+    driver: bridge # Network kiểu bridge mặc định

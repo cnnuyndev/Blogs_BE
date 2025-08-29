@@ -12,6 +12,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 from rest_framework.throttling import AnonRateThrottle
 from django.template.loader import render_to_string
+from django.core.cache import cache  # Cache backend (Redis qua django-redis)
 
 logger = logging.getLogger(__name__)
 
@@ -22,21 +23,62 @@ class BlogListPagination(PageNumberPagination):
 
 @api_view(["GET"])
 def blog_list(request):
+    # Cache key dựa trên full URL (bao gồm query string: trang, filter, ...)
+    cache_key = f"blog_list:{request.get_full_path()}"
+    cached_payload = cache.get(cache_key)
+    if cached_payload is not None:
+        print("cache key: ", cache_key)
+        print("cache: ", cached_payload)
+        # Trả về payload đã cache (bao gồm cả cấu trúc pagination của DRF)
+        return Response(cached_payload)
+
+    # Không có cache: truy vấn DB, phân trang, serialize
     blogs = Blog.objects.all()
     paginator = BlogListPagination()
     paginated_blogs = paginator.paginate_queryset(blogs, request)
     serializer = BlogSerializer(paginated_blogs, many=True)
-    return paginator.get_paginated_response(serializer.data)
+
+    # DRF pagination trả Response đặc biệt; ta cache phần data của Response
+    paginated_response = paginator.get_paginated_response(serializer.data)
+    payload = paginated_response.data
+
+    # Lưu cache trong 15 phút (tuỳ chỉnh theo nhu cầu)
+    cache.set(cache_key, payload, timeout=60*15)
+    return Response(payload)
 
 
 @api_view(["GET"])
 def get_blog(request, slug):
+    # Cache theo slug bài viết
+    cache_key = f"blog_detail:{slug}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return Response(cached)
+
     try:
         blog = Blog.objects.get(slug=slug)
         serializer = BlogSerializer(blog)
-        return Response(serializer.data)
+        data = serializer.data
+        cache.set(cache_key, data, timeout=60*15)  # Cache 15 phút
+        return Response(data)
     except Blog.DoesNotExist:
         return Response({"error": "Blog not found"}, status=404)
+
+
+# Hàm tiện ích để xoá cache liên quan đến blog list/detail
+def invalidate_blog_cache(slug: str | None = None) -> None:
+    try:
+        # Xoá cache list (mọi trang/param) — pattern match nếu backend hỗ trợ
+        if hasattr(cache, 'delete_pattern'):
+            cache.delete_pattern('blog_list:*')
+        else:
+            # Fallback an toàn nếu không hỗ trợ pattern
+            cache.clear()
+    except Exception:
+        cache.clear()
+
+    if slug:
+        cache.delete(f"blog_detail:{slug}")
 
 
 class RegistrationRateThrottle(AnonRateThrottle):
@@ -193,7 +235,9 @@ def create_blog(request):
     user = request.user
     serializer = BlogSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save(author=user)
+        blog = serializer.save(author=user)
+        # Invalidate cache sau khi tạo blog mới để list/detail phản ánh dữ liệu mới
+        invalidate_blog_cache(slug=getattr(blog, 'slug', None))
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -205,9 +249,15 @@ def update_blog(request, pk):
     blog = Blog.objects.get(id=pk)
     if blog.author != user:
         return Response({"error": "You are not the author of this blog"}, status=status.HTTP_403_FORBIDDEN)
+    old_slug = getattr(blog, 'slug', None)
     serializer = BlogSerializer(blog, data=request.data)
     if serializer.is_valid():
-        serializer.save()
+        blog = serializer.save()
+        # Invalidate cache sau khi cập nhật; xử lý cả trường hợp slug thay đổi
+        new_slug = getattr(blog, 'slug', None)
+        invalidate_blog_cache(slug=old_slug)
+        if new_slug and new_slug != old_slug:
+            invalidate_blog_cache(slug=new_slug)
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -219,5 +269,8 @@ def delete_blog(request, pk):
     user = request.user
     if blog.author != user:
         return Response({"error": "You are not the author of this blog"}, status=status.HTTP_403_FORBIDDEN)
+    slug = getattr(blog, 'slug', None)
     blog.delete()
+    # Invalidate cache sau khi xoá
+    invalidate_blog_cache(slug=slug)
     return Response({"message": "Blog deleted successfully"}, status=status.HTTP_204_NO_CONTENT)

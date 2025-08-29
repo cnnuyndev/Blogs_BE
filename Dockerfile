@@ -1,40 +1,39 @@
+# syntax=docker/dockerfile:1
+
+# Chọn base image Python tối giản cho runtime nhỏ gọn
 FROM python:3.12-slim
 
+# Tắt tạo .pyc và bật log không buffer (đẩy log ra stdout ngay lập tức)
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PYTHONUNBUFFERED=1
 
+# Cài các gói hệ thống cần thiết cho build dependencies (ví dụ biên dịch, libpq cho Postgres)
+RUN apt-get update -y && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    libpq-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+# Đặt thư mục làm việc trong container
 WORKDIR /app
 
-# System deps
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    nginx \
-    supervisor \
-    build-essential \
-    libpq-dev \
-  && rm -rf /var/lib/apt/lists/*
-
-# Python deps
+# Cài dependency Python trước để tận dụng cache khi code thay đổi
 COPY requirements.txt ./
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# App code
-COPY . /app
+# Sao chép toàn bộ mã nguồn vào container
+COPY . .
 
-# Collect static
-RUN mkdir -p /app/static /app/media && \
-    chmod -R 755 /app/static /app/media && \
-    python manage.py collectstatic --no-input
+# Đảm bảo script entrypoint có quyền thực thi (nếu tồn tại)
+RUN chmod +x /app/entrypoint.sh || true
 
-# Nginx config
-# Remove default Nginx site and use our config
-RUN rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/default.conf || true
-COPY nginx.conf /etc/nginx/conf.d/app.conf
+# Thiết lập các biến môi trường cho Django
+ENV DJANGO_SETTINGS_MODULE=BE_BLOG.settings \
+    PYTHONPATH=/app
 
-# Supervisor config
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+# Mở cổng 8000 (Gunicorn sẽ lắng nghe ở cổng này)
+EXPOSE 8000
 
-EXPOSE 80
-
-CMD ["/usr/bin/supervisord", "-n"]
+# Điểm vào container: chạy script entrypoint để migrate, collectstatic và start Gunicorn
+ENTRYPOINT ["/app/entrypoint.sh"]
 

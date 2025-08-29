@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / '.env.production')
+load_dotenv(BASE_DIR / '.env')
 
 
 # Quick-start development settings - unsuitable for production
@@ -48,7 +48,6 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -58,10 +57,10 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
 ]
 
-CORS_ALLOWED_ORIGINS = os.environ.get(
-    'CORS_ALLOWED_ORIGINS',
-    'http://localhost:5173,https://blogs-fe.onrender.com'
-).split(',')
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "https://blogs-fe.onrender.com",
+]
 
 ROOT_URLCONF = 'BE_BLOG.urls'
 
@@ -125,14 +124,16 @@ USE_I18N = True
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
+# Static and media files
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR/"static"
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-MEDIA_URL = "/img/"
-MEDIA_ROOT = Path(os.environ.get('MEDIA_ROOT', str(BASE_DIR / 'media')))
+# In containers we will mount volumes at /static and /media.
+# Allow overriding via environment variables while keeping local defaults.
+STATIC_URL = os.environ.get('STATIC_URL', '/static/')
+STATIC_ROOT = Path(os.environ.get('STATIC_ROOT', BASE_DIR / 'static'))
+
+MEDIA_URL = os.environ.get('MEDIA_URL', '/media/')
+MEDIA_ROOT = Path(os.environ.get('MEDIA_ROOT', BASE_DIR / 'media'))
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
@@ -172,3 +173,39 @@ DEFAULT_FROM_EMAIL = os.environ.get(
 EMAIL_SUBJECT_PREFIX = '[DevScribe] '
 EMAIL_TIMEOUT = 5  # seconds
 EMAIL_VERIFICATION_TIMEOUT = 24 * 60 * 60  # 24 hours in seconds
+
+# Reverse proxy / HTTPS settings (for Nginx + Docker)
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# CSRF trusted origins can be provided via env (comma separated)
+_csrf_trusted = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
+if _csrf_trusted:
+    CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_trusted.split(',') if o.strip()]
+
+# Redis cache (optional). Enable if REDIS_URL provided; else default to local memory.
+_redis_url = os.environ.get('REDIS_URL', 'redis://redis:6379/1')
+try:
+    import django
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': _redis_url,
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                'SERIALIZER': 'django_redis.serializers.json.JSONSerializer',
+            },
+            'KEY_PREFIX': os.environ.get('CACHE_KEY_PREFIX', 'be_blog'),
+            'TIMEOUT': int(os.environ.get('CACHE_TIMEOUT', '300')),
+        }
+    }
+    SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+    SESSION_CACHE_ALIAS = 'default'
+except Exception:
+    # Fallback to local memory cache if redis libs are unavailable during local dev
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'unique-snowflake',
+        }
+    }

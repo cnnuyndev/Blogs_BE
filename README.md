@@ -27,8 +27,8 @@ Blog Backend API là một ứng dụng backend được xây dựng bằng Djan
 ### Deployment & Production
 - **Gunicorn 23.0.0** - WSGI HTTP Server cho production
 - **Nginx** - Reverse proxy, phục vụ static và media
-- **Supervisor** - Quản lý nhiều process (Nginx + Gunicorn)
 - **Docker** - Build & deploy container
+- **Redis (django-redis)** - Cache/session tốc độ cao cho Django
 
 ### Development Tools
 - **SQLParse 0.5.3** - SQL parsing và formatting
@@ -135,15 +135,16 @@ python manage.py runserver
 ## 🔧 Cấu hình
 
 ### Environment Variables
-Tạo file `.env.production` ở thư mục gốc (cùng cấp `manage.py`):
+Tạo file `.env` (hoặc `.env.production`) ở thư mục gốc (cùng cấp `manage.py`):
 ```env
 SECRET_KEY=your-secret-key
 DEBUG=False
 ALLOWED_HOSTS=localhost,127.0.0.1,your-domain.com
+CSRF_TRUSTED_ORIGINS=https://your-domain.com,https://www.your-domain.com
 CORS_ALLOWED_ORIGINS=http://localhost:5173,https://your-frontend-domain.com
 
 # Email
-DEFAULT_FROM_EMAIL=cn.nguyen.dev@gmail.com
+DEFAULT_FROM_EMAIL=you@example.com
 EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
 EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
@@ -152,8 +153,14 @@ EMAIL_USE_SSL=False
 EMAIL_HOST_USER=your-email@gmail.com
 EMAIL_HOST_PASSWORD=your-app-password-or-smtp-key
 
-# Media (tùy chọn - nếu mount persistent path khác)
-# MEDIA_ROOT=/app/media
+# Redis (cache/session)
+REDIS_URL=redis://redis:6379/1
+CACHE_KEY_PREFIX=be_blog
+CACHE_TIMEOUT=300
+
+# Static/Media (khi chạy trong container, đã được mount)
+STATIC_ROOT=/static
+MEDIA_ROOT=/media
 ```
 
 ### CORS Configuration
@@ -185,9 +192,47 @@ CORS_ALLOWED_ORIGINS = [
 - `PUT /api/update_blog/{id}/` - Cập nhật bài viết (authenticated)
 - `POST /api/delete_blog/{id}/` - Xóa bài viết (authenticated)
 
+## ⚡ Redis & Caching
+
+- Hệ thống sử dụng Redis (qua `django-redis`) làm cache và session backend.
+- Cấu hình cache nằm trong `BE_BLOG/settings.py`, mặc định `REDIS_URL=redis://redis:6379/1` (trong docker-compose service `redis`).
+- Blog endpoints được cache:
+  - `GET /api/blog_list/` – cache theo full URL (bao gồm query string cho phân trang & lọc). TTL mặc định 15 phút (có thể chỉnh qua code).
+  - `GET /api/blogs/{slug}` – cache theo `slug`. TTL mặc định 15 phút.
+- Cache invalidation tự động khi có thay đổi dữ liệu:
+  - Tạo/Cập nhật/Xóa bài viết sẽ xóa cache list và cache chi tiết theo `slug` liên quan.
+
 ## 🚀 Deployment
 
-### Docker (khuyến nghị: Nginx + Gunicorn)
+### Docker Compose (khuyến nghị: Nginx + Gunicorn + Redis)
+
+- Chạy lần đầu:
+```bash
+docker compose build
+docker compose up -d
+```
+- Logs:
+```bash
+docker compose logs -f web
+docker compose logs -f nginx
+```
+- Migrate/createsuperuser trong container:
+```bash
+docker compose exec web python manage.py migrate
+docker compose exec web python manage.py createsuperuser
+```
+- Dừng/xóa container:
+```bash
+docker compose down
+# Xóa kèm volumes (reset static/media/redis):
+docker compose down -v
+```
+- Truy cập:
+  - App: `http://localhost/`
+  - Static: `http://localhost/static/`
+  - Media: `http://localhost/media/`
+
+### Docker (single image)
 
 1) Build image
 ```bash
@@ -212,10 +257,10 @@ docker run -d --name blogs-be `
 4) Kiểm tra
 - App: http://localhost:8080/
 - Static: http://localhost:8080/static/
-- Media: http://localhost:8080/img/
+- Media: http://localhost:8080/media/
 
 Ghi chú:
-- Nginx phục vụ `/static/` từ `/app/static/` (đã collectstatic trong Dockerfile) và `/img/` từ `/app/media/`.
+- Nginx phục vụ `/static/` và `/media/` trực tiếp từ volumes.
 - Upload media được lưu ở `-v <host-media>:/app/media`.
 
 ### Render.com (Deploy từ Dockerfile)
@@ -231,7 +276,7 @@ Dự án hỗ trợ upload và quản lý:
 - **Profile Pictures**: Lưu trong `media/profile_img/`
 
 Production khuyến nghị:
-- Dùng Nginx phục vụ trực tiếp `location /img/ { alias /app/media/; }` (đã cấu hình trong `nginx.conf`).
+- Dùng Nginx phục vụ trực tiếp `location /media/ { alias /media/; }` (đã cấu hình trong `nginx.conf`).
 - Hoặc dùng S3/Cloud Storage với `django-storages` nếu bạn cần lưu trữ bền vững, scale nhiều instance.
 
 ## 🔒 Bảo mật
