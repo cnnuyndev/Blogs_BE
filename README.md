@@ -1,329 +1,264 @@
-# Blog Backend API
+# BE_BLOG - Django Blog Backend
 
-## 📋 Mô tả dự án
+A Django REST API backend for a blog application with Celery, Redis, and Nginx.
 
-Blog Backend API là một ứng dụng backend được xây dựng bằng Django REST Framework, cung cấp API cho hệ thống blog với các tính năng quản lý người dùng, bài viết và xác thực JWT.
+## Features
 
-## 🛠️ Công nghệ sử dụng
-
-### Backend Framework
-- **Django 5.2.4** - Web framework chính
-- **Django REST Framework 3.16.0** - Framework để xây dựng REST API
-- **ASGI 3.9.1** - Asynchronous Server Gateway Interface
-
-### Database
-- **SQLite3** - Cơ sở dữ liệu (development)
-- **Django ORM** - Object-Relational Mapping
-
-### Authentication & Security
-- **Django REST Framework Simple JWT 5.5.1** - JSON Web Token authentication
-- **PyJWT 2.10.1** - Python library cho JWT
-- **Django CORS Headers 4.7.0** - Cross-Origin Resource Sharing
-
-### File Handling
-- **Pillow 11.3.0** - Python Imaging Library cho xử lý hình ảnh
-- **Django Media Files** - Quản lý upload và serve media files
-
-### Deployment & Production
-- **Gunicorn 23.0.0** - WSGI HTTP Server cho production
-- **Nginx** - Reverse proxy, phục vụ static và media
-- **Docker** - Build & deploy container
-- **Redis (django-redis)** - Cache/session tốc độ cao cho Django
-
-### Development Tools
-- **SQLParse 0.5.3** - SQL parsing và formatting
-- **Packaging 25.0** - Core utilities cho Python packages
-- **TZData 2025.2** - Timezone database
-
-## 🚀 Tính năng chính
-
-### 👤 Quản lý người dùng
-- Đăng ký tài khoản mới
-- Thông tin profile chi tiết (bio, job title, social links)
-- Upload và quản lý ảnh đại diện
-- Tích hợp social media links (Facebook, YouTube, Instagram, Twitter, LinkedIn)
-
-### 📝 Quản lý bài viết
-- Tạo, chỉnh sửa, xóa bài viết
-- Hệ thống draft/publish
-- Phân loại bài viết theo categories
-- Upload ảnh đại diện cho bài viết
-- Slug tự động tạo từ title
-- Pagination cho danh sách bài viết
-
-### 🔐 Xác thực & Bảo mật
+- Django REST Framework API
 - JWT Authentication
-- CORS configuration cho frontend
-- Permission-based access control
-- Secure file uploads
+- Celery for background tasks
+- Redis for caching and message broker
+- Nginx reverse proxy
+- Docker containerization
+- Email verification system
 
-### 📊 Categories
-- Frontend
-- Backend
-- Fullstack
-- Design
-- Blockchain
-- DevOps
-- AI
-- Other
+## Prerequisites
 
-## 🏗️ Cấu trúc dự án
+- Docker
+- Docker Compose
 
-```
-BE_BLOG/
-├── app/                    # Main application
-│   ├── models.py          # Database models
-│   ├── views.py           # API views
-│   ├── serializers.py     # DRF serializers
-│   ├── urls.py            # URL routing
-│   └── migrations/        # Database migrations
-├── BE_BLOG/               # Project settings
-│   ├── settings.py        # Django settings
-│   ├── urls.py            # Main URL configuration
-│   └── wsgi.py            # WSGI configuration
-├── media/                 # Uploaded files
-│   ├── blog_img/          # Blog images
-│   └── profile_img/       # Profile pictures
-├── requirements.txt       # Python dependencies
-├── build.sh              # Deployment script
-└── manage.py             # Django management script
-```
+## Quick Start
 
-## 📦 Cài đặt
-
-### Yêu cầu hệ thống
-- Python 3.8+
-- pip
-- Virtual environment (khuyến nghị)
-
-### Bước 1: Clone repository
+### 1. Clone the repository
 ```bash
 git clone <repository-url>
 cd BE_BLOG
 ```
 
-### Bước 2: Tạo virtual environment
+### 2. Set up environment variables
 ```bash
-python -m venv env
-# Windows
-env\Scripts\activate
-# Linux/Mac
-source env/bin/activate
+cp env.example .env
+# Edit .env file with your configuration
 ```
 
-### Bước 3: Cài đặt dependencies
+### 3. Build and run with Docker Compose
+
+#### For Production:
 ```bash
+docker-compose up --build
+```
+
+#### For Development:
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.override.yml up --build
+```
+
+### 4. Access the application
+- API: http://localhost
+- Admin: http://localhost/admin/
+
+## Services
+
+### Web (Django)
+- **Port**: 8000 (internal), 80 (external via Nginx)
+- **Description**: Django application with Gunicorn WSGI server
+
+### Celery Worker
+- **Description**: Processes background tasks
+- **Dependencies**: Redis, Web
+
+### Celery Beat
+- **Description**: Scheduler for periodic tasks
+- **Dependencies**: Redis, Web
+
+### Redis
+- **Port**: 6379 (internal)
+- **Description**: Message broker and cache backend
+
+### Nginx
+- **Port**: 80 (external)
+- **Description**: Reverse proxy and static file server
+
+## Environment Variables
+
+### Required
+- `SECRET_KEY`: Django secret key
+- `DEBUG`: Set to False for production
+- `ALLOWED_HOSTS`: Comma-separated list of allowed hosts
+
+### Optional
+- `REDIS_URL`: Redis connection URL (default: redis://redis:6379/1)
+- `CELERY_BROKER_URL`: Celery broker URL (default: redis://redis:6379/1)
+- `CELERY_RESULT_BACKEND`: Celery result backend (default: redis://redis:6379/1)
+- `EMAIL_HOST_USER`: SMTP email username
+- `EMAIL_HOST_PASSWORD`: SMTP email password
+
+## Development
+
+### Running locally without Docker
+```bash
+# Install dependencies
 pip install -r requirements.txt
-```
 
-### Bước 4: Cấu hình database
-```bash
-python manage.py makemigrations
+# Set up environment
+cp env.example .env
+# Edit .env file
+
+# Run migrations
 python manage.py migrate
-```
 
-### Bước 5: Tạo superuser (tùy chọn)
-```bash
+# Create superuser
 python manage.py createsuperuser
-```
 
-### Bước 6: Chạy development server
-```bash
+# Run development server
 python manage.py runserver
+
+# Run Celery worker (in another terminal)
+celery -A BE_BLOG worker --loglevel=info
+
+# Run Celery beat (in another terminal)
+celery -A BE_BLOG beat --loglevel=info
 ```
 
-## 🔧 Cấu hình
+### Running tests
 
-### Environment Variables
-Tạo file `.env` (hoặc `.env.production`) ở thư mục gốc (cùng cấp `manage.py`):
-```env
-SECRET_KEY=your-secret-key
+#### Using Django test runner:
+```bash
+python manage.py test
+```
+
+#### Using pytest (recommended):
+```bash
+# Install test dependencies
+pip install -r requirements.txt
+
+# Run all tests
+python run_tests.py
+
+# Run specific test types
+python run_tests.py --unit          # Unit tests only
+python run_tests.py --integration   # Integration tests only
+python run_tests.py --api           # API tests only
+python run_tests.py --celery        # Celery tests only
+
+# Run with coverage
+python run_tests.py --coverage
+
+# Run specific test file
+python run_tests.py --path tests/api/test_registration.py
+
+# Run tests with specific markers
+python run_tests.py --markers "slow"
+```
+
+#### Test Structure:
+```
+tests/
+├── __init__.py
+├── conftest.py              # Pytest fixtures
+├── unit/                    # Unit tests
+│   ├── test_models.py
+│   ├── test_serializers.py
+│   └── test_celery_tasks.py
+├── integration/             # Integration tests
+│   └── test_blog_workflow.py
+└── api/                     # API tests
+    └── test_registration.py
+```
+
+## Production Deployment
+
+### 1. Set production environment variables
+```bash
 DEBUG=False
-ALLOWED_HOSTS=localhost,127.0.0.1,your-domain.com
-CSRF_TRUSTED_ORIGINS=https://your-domain.com,https://www.your-domain.com
-CORS_ALLOWED_ORIGINS=http://localhost:5173,https://your-frontend-domain.com
-
-# Email
-DEFAULT_FROM_EMAIL=you@example.com
-EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USE_TLS=True
-EMAIL_USE_SSL=False
-EMAIL_HOST_USER=your-email@gmail.com
-EMAIL_HOST_PASSWORD=your-app-password-or-smtp-key
-
-# Redis (cache/session)
-REDIS_URL=redis://redis:6379/1
-CACHE_KEY_PREFIX=be_blog
-CACHE_TIMEOUT=300
-
-# Static/Media (khi chạy trong container, đã được mount)
-STATIC_ROOT=/static
-MEDIA_ROOT=/media
+SECRET_KEY=your-secure-secret-key
+ALLOWED_HOSTS=your-domain.com
+CSRF_TRUSTED_ORIGINS=https://your-domain.com
 ```
 
-### CORS Configuration
-Cấu hình CORS trong `settings.py`:
-```python
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "https://your-frontend-domain.com",
-]
-```
-
-## 📡 API Endpoints
-
-### Authentication
-- `POST /api/register_user/` - Đăng ký người dùng mới (tạo user is_active=False và gửi email xác thực)
-- `GET /api/verify-email/?token=...` - Xác thực email, kích hoạt tài khoản
-- `POST /api/token/` - Lấy JWT token
-- `POST /api/token_refresh/` - Refresh JWT token
-
-### Users
-- `GET /api/userinfo/{username}/` - Lấy thông tin người dùng
-- `GET /api/username/` - Lấy username hiện tại (authenticated)
-- `PUT /api/update-profile/` - Cập nhật profile (authenticated)
-
-### Blogs
-- `GET /api/blog_list/` - Danh sách bài viết (paginated)
-- `GET /api/blogs/{slug}` - Chi tiết bài viết theo slug
-- `POST /api/create_blog/` - Tạo bài viết mới (authenticated)
-- `PUT /api/update_blog/{id}/` - Cập nhật bài viết (authenticated)
-- `POST /api/delete_blog/{id}/` - Xóa bài viết (authenticated)
-
-## ⚡ Redis & Caching
-
-- Hệ thống sử dụng Redis (qua `django-redis`) làm cache và session backend.
-- Cấu hình cache nằm trong `BE_BLOG/settings.py`, mặc định `REDIS_URL=redis://redis:6379/1` (trong docker-compose service `redis`).
-- Blog endpoints được cache:
-  - `GET /api/blog_list/` – cache theo full URL (bao gồm query string cho phân trang & lọc). TTL mặc định 15 phút (có thể chỉnh qua code).
-  - `GET /api/blogs/{slug}` – cache theo `slug`. TTL mặc định 15 phút.
-- Cache invalidation tự động khi có thay đổi dữ liệu:
-  - Tạo/Cập nhật/Xóa bài viết sẽ xóa cache list và cache chi tiết theo `slug` liên quan.
-
-## 🚀 Deployment
-
-### Docker Compose (khuyến nghị: Nginx + Gunicorn + Redis)
-
-- Chạy lần đầu:
+### 2. Build and run
 ```bash
-docker compose build
-docker compose up -d
+docker-compose -f docker-compose.yml up --build -d
 ```
-- Logs:
+
+### 3. Create superuser
 ```bash
-docker compose logs -f web
-docker compose logs -f nginx
+docker-compose exec web python manage.py createsuperuser
 ```
-- Migrate/createsuperuser trong container:
+
+### 4. Monitor logs
 ```bash
-docker compose exec web python manage.py migrate
-docker compose exec web python manage.py createsuperuser
+docker-compose logs -f
 ```
-- Dừng/xóa container:
+
+## API Endpoints
+
+- `/api/` - API root
+- `/admin/` - Django admin interface
+- `/health/` - Health check endpoint
+
+## Celery Tasks
+
+Celery is configured to handle background tasks such as:
+- Email sending
+- File processing
+- Scheduled tasks
+
+### Running Celery commands
 ```bash
-docker compose down
-# Xóa kèm volumes (reset static/media/redis):
-docker compose down -v
+# Check Celery status
+docker-compose exec web celery -A BE_BLOG inspect active
+
+# Monitor Celery tasks
+docker-compose exec web celery -A BE_BLOG monitor
+
+# Purge all tasks
+docker-compose exec web celery -A BE_BLOG purge
 ```
-- Truy cập:
-  - App: `http://localhost/`
-  - Static: `http://localhost/static/`
-  - Media: `http://localhost/media/`
 
-### Docker (single image)
+## Troubleshooting
 
-1) Build image
+### Common Issues
+
+1. **Database migrations not applied**
+   ```bash
+   docker-compose exec web python manage.py migrate
+   ```
+
+2. **Static files not collected**
+   ```bash
+   docker-compose exec web python manage.py collectstatic --noinput
+   ```
+
+3. **Celery worker not starting**
+   - Check Redis connection
+   - Verify Celery configuration in settings.py
+
+4. **Permission denied on entrypoint.sh**
+   ```bash
+   chmod +x entrypoint.sh
+   ```
+
+5. **Line endings error (Windows)**
+   ```powershell
+   # Run PowerShell script to fix line endings
+   .\fix-line-endings.ps1
+   
+   # Or manually convert using Git
+   git config core.autocrlf false
+   git add --renormalize .
+   ```
+
+### Logs
 ```bash
-docker build -t blogs-be:latest .
+# View all logs
+docker-compose logs
+
+# View specific service logs
+docker-compose logs web
+docker-compose logs celery
+docker-compose logs redis
+docker-compose logs nginx
 ```
 
-2) Tạo thư mục media trên máy host
-```bash
-# Windows PowerShell
-mkdir .\media
-```
+## Contributing
 
-3) Chạy container
-```powershell
-docker run -d --name blogs-be `
-  -p 8080:80 `
-  --env-file .\.env.production `
-  -v "$(Resolve-Path .\media).Path:/app/media" `
-  blogs-be:latest
-```
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
 
-4) Kiểm tra
-- App: http://localhost:8080/
-- Static: http://localhost:8080/static/
-- Media: http://localhost:8080/media/
+## License
 
-Ghi chú:
-- Nginx phục vụ `/static/` và `/media/` trực tiếp từ volumes.
-- Upload media được lưu ở `-v <host-media>:/app/media`.
-
-### Render.com (Deploy từ Dockerfile)
-- Tạo Web Service, nguồn là repo, chọn Deploy from Dockerfile.
-- Thiết lập Environment Variables theo `.env.production`.
-- Port: 80 (Nginx). Không cần build command riêng.
-- Media: mount Persistent Disk (nếu Render plan hỗ trợ) hoặc dùng S3 qua `django-storages`.
-
-## 📁 Media Files
-
-Dự án hỗ trợ upload và quản lý:
-- **Blog Images**: Lưu trong `media/blog_img/`
-- **Profile Pictures**: Lưu trong `media/profile_img/`
-
-Production khuyến nghị:
-- Dùng Nginx phục vụ trực tiếp `location /media/ { alias /media/; }` (đã cấu hình trong `nginx.conf`).
-- Hoặc dùng S3/Cloud Storage với `django-storages` nếu bạn cần lưu trữ bền vững, scale nhiều instance.
-
-## 🔒 Bảo mật
-
-- JWT Authentication cho API endpoints
-- CORS configuration cho cross-origin requests
-- File upload validation
-- Permission-based access control
-- Secure password validation
-
-## 🤝 Đóng góp
-
-1. Fork dự án
-2. Tạo feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to branch (`git push origin feature/AmazingFeature`)
-5. Mở Pull Request
-
-
-## 📞 Liên hệ
-- **Project Link**: [https://github.com/cnnuyndev/Blogs_BE]
-
-## 🙏 Acknowledgments
-
-- Django Documentation
-- Django REST Framework Documentation
-- JWT Documentation
-- Pillow Documentation 
-
-## Docker quick commands
-```bash
-# Build
-docker build -t blogs-be:latest .
-
-# Run (Windows PowerShell)
-docker run -d --name blogs-be `
-  -p 8080:80 `
-  --env-file .\.env.production `
-  -v "$(Resolve-Path .\media).Path:/app/media" `
-  blogs-be:latest
-
-# Logs
-docker logs -f blogs-be
-
-# Migrate (trong container)
-docker exec -it blogs-be python manage.py migrate
-
-# Stop & remove
-docker stop blogs-be && docker rm blogs-be
-```
+This project is licensed under the MIT License.

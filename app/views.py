@@ -8,11 +8,12 @@ from django.contrib.auth import get_user_model
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from django.core import signing
-from django.core.mail import send_mail
 from django.conf import settings
 from rest_framework.throttling import AnonRateThrottle
 from django.template.loader import render_to_string
 from django.core.cache import cache  # Cache backend (Redis qua django-redis)
+# Import Celery tasks
+from .tasks import send_verification_email_task, send_blog_notification_task, resend_verification_email_task
 
 logger = logging.getLogger(__name__)
 
@@ -88,10 +89,11 @@ class RegistrationRateThrottle(AnonRateThrottle):
 @api_view(["POST"])
 @throttle_classes([RegistrationRateThrottle])
 def register_user(request):
+    print("Registering user...", request.data)
     serializer = UserRegistrationSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.save()
-
+        print("User registered successfully:", user)
         # Tạo token xác thực email
         token_data = {
             "user_id": user.id,
@@ -118,19 +120,20 @@ def register_user(request):
 
         subject = f"{settings.EMAIL_SUBJECT_PREFIX}Xác thực email đăng ký tài khoản"
 
+        # Gửi email xác thực bằng Celery task (bất đồng bộ)
         try:
-            send_mail(
+            send_verification_email_task.delay(
                 subject=subject,
-                message=plain_message,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[user.email],
+                plain_message=plain_message,
                 html_message=html_message,
-                fail_silently=False
+                to_email=user.email,
+                from_email=settings.DEFAULT_FROM_EMAIL
             )
+            logger.info(f"Verification email task queued for {user.email}")
         except Exception as e:
             logger.error(
-                f"Failed to send verification email to {user.email}: {str(e)}")
-            # Có thể xử lý thêm như xóa user nếu không gửi được email
+                f"Failed to queue verification email task for {user.email}: {str(e)}")
+            # Không xóa user, chỉ log lỗi. Email có thể được gửi lại sau
 
         return Response({
             "message": "Đăng ký thành công. Vui lòng kiểm tra email để xác thực và kích hoạt tài khoản.",
@@ -229,7 +232,7 @@ def update_user_profile(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(['POSt'])
+@api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_blog(request):
     user = request.user
@@ -238,6 +241,20 @@ def create_blog(request):
         blog = serializer.save(author=user)
         # Invalidate cache sau khi tạo blog mới để list/detail phản ánh dữ liệu mới
         invalidate_blog_cache(slug=getattr(blog, 'slug', None))
+
+        # Gửi thông báo blog mới bằng Celery task (tùy chọn)
+        try:
+            # Có thể lấy danh sách subscribers từ database hoặc settings
+            # Ví dụ: subscriber_emails = get_subscriber_emails()
+            # send_blog_notification_task.delay(
+            #     blog_title=blog.title,
+            #     blog_author=user.username,
+            #     subscriber_emails=subscriber_emails
+            # )
+            logger.info(f"Blog created: {blog.title} by {user.username}")
+        except Exception as e:
+            logger.error(f"Failed to queue blog notification task: {str(e)}")
+
         return Response(serializer.data)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -274,3 +291,47 @@ def delete_blog(request, pk):
     # Invalidate cache sau khi xoá
     invalidate_blog_cache(slug=slug)
     return Response({"message": "Blog deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["POST"])
+@throttle_classes([RegistrationRateThrottle])
+def resend_verification_email(request):
+    """
+    Gửi lại email xác thực cho user chưa kích hoạt tài khoản.
+    """
+    email = request.data.get("email")
+    if not email:
+        return Response({"error": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    User = get_user_model()
+    try:
+        user = User.objects.get(email=email)
+
+        # Kiểm tra xem user đã được kích hoạt chưa
+        if user.is_active:
+            return Response({"message": "Tài khoản đã được kích hoạt"}, status=status.HTTP_200_OK)
+
+        # Gửi lại email xác thực bằng Celery task
+        try:
+            resend_verification_email_task.delay(
+                user_id=user.id,
+                user_email=user.email
+            )
+            logger.info(
+                f"Resend verification email task queued for {user.email}")
+
+            return Response({
+                "message": "Email xác thực đã được gửi lại. Vui lòng kiểm tra hộp thư."
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(
+                f"Failed to queue resend verification email task for {user.email}: {str(e)}")
+            return Response({
+                "error": "Không thể gửi email xác thực. Vui lòng thử lại sau."
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    except User.DoesNotExist:
+        return Response({
+            "error": "Email không tồn tại trong hệ thống"
+        }, status=status.HTTP_404_NOT_FOUND)

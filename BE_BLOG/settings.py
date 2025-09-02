@@ -49,12 +49,12 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
 ]
 
 CORS_ALLOWED_ORIGINS = [
@@ -134,28 +134,33 @@ STATIC_ROOT = Path(os.environ.get('STATIC_ROOT', BASE_DIR / 'static'))
 
 MEDIA_URL = os.environ.get('MEDIA_URL', '/media/')
 MEDIA_ROOT = Path(os.environ.get('MEDIA_ROOT', BASE_DIR / 'media'))
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
-
     'DEFAULT_AUTHENTICATION_CLASSES': (
-
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.TokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',  # cái này cần CSRF
-    )
-
+        'rest_framework.authentication.SessionAuthentication',
+    ),
+    # 'DEFAULT_PERMISSION_CLASSES': [
+    #     'rest_framework.permissions.IsAuthenticatedOrReadOnly',   #dùng tất cả API endpoints đều yêu cầu xác thực trừ khi được chỉ định rõ ràng.
+                                                                    #dùng decorator @permission_classes([]) cho những hàm Không yêu cầu xác thực
+    # ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 10,
 }
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ROTATE_REFRESH_TOKENS": True,
 }
 
 AUTH_USER_MODEL = 'app.CustomUser'
-ALLOWED_HOSTS = ["*"]
 
 # Email settings
 EMAIL_BACKEND = os.environ.get(
@@ -174,6 +179,41 @@ EMAIL_SUBJECT_PREFIX = '[DevScribe] '
 EMAIL_TIMEOUT = 5  # seconds
 EMAIL_VERIFICATION_TIMEOUT = 24 * 60 * 60  # 24 hours in seconds
 
+# Celery Configuration
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://redis:6379/1')
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://redis:6379/1')
+
+# Celery Task Settings
+CELERY_TASK_ALWAYS_EAGER = os.environ.get('CELERY_TASK_ALWAYS_EAGER', 'False').lower() == 'true'
+CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ENABLE_UTC = True
+
+# Celery Worker Settings
+CELERY_WORKER_CONCURRENCY = int(os.environ.get('CELERY_WORKER_CONCURRENCY', '2'))
+CELERY_WORKER_MAX_TASKS_PER_CHILD = int(os.environ.get('CELERY_WORKER_MAX_TASKS_PER_CHILD', '1000'))
+CELERY_WORKER_PREFETCH_MULTIPLIER = int(os.environ.get('CELERY_WORKER_PREFETCH_MULTIPLIER', '1'))
+
+# Celery Beat Settings
+CELERY_BEAT_SCHEDULER = 'celery.beat.PersistentScheduler'
+
+# Celery Task Routes (optional - for advanced routing)
+CELERY_TASK_ROUTES = {
+    'app.tasks.send_verification_email_task': {'queue': 'email'},
+    'app.tasks.send_notification_email_task': {'queue': 'email'},
+    'app.tasks.send_blog_notification_task': {'queue': 'email'},
+    'app.tasks.resend_verification_email_task': {'queue': 'email'},
+}
+
+# Celery Task Default Queue
+CELERY_TASK_DEFAULT_QUEUE = 'default'
+
+# Site URL for email verification (add to your .env)
+SITE_URL = os.environ.get('SITE_URL', 'http://localhost')
+
 # Reverse proxy / HTTPS settings (for Nginx + Docker)
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -183,7 +223,7 @@ _csrf_trusted = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
 if _csrf_trusted:
     CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_trusted.split(',') if o.strip()]
 
-# Redis cache (optional). Enable if REDIS_URL provided; else default to local memory.
+# Redis cache configuration
 _redis_url = os.environ.get('REDIS_URL', 'redis://redis:6379/1')
 try:
     import django
@@ -209,3 +249,14 @@ except Exception:
             'LOCATION': 'unique-snowflake',
         }
     }
+
+# Security settings for production
+if not DEBUG:
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_REDIRECT_EXEMPT = []
+    SECURE_SSL_REDIRECT = False  # Set to True if using HTTPS
+    SESSION_COOKIE_SECURE = False  # Set to True if using HTTPS
+    CSRF_COOKIE_SECURE = False  # Set to True if using HTTPS

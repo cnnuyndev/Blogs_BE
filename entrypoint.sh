@@ -1,21 +1,37 @@
-#!/usr/bin/env sh
-# Dừng script ngay khi có lệnh lỗi
+#!/bin/sh
+# Stop script on error
 set -e
 
-# Thiết lập giá trị mặc định cho biến môi trường nếu chưa được truyền vào
+# Set default environment variables
 : "${DJANGO_SETTINGS_MODULE:=BE_BLOG.settings}"
 : "${WEB_CONCURRENCY:=3}"
 : "${PORT:=8000}"
 
-# Chạy migrate để áp dụng các thay đổi database trước khi start server
+echo "Starting Django application..."
+
+# Run database migrations
+echo "Running database migrations..."
 python manage.py migrate --noinput
-# Gom toàn bộ static files về STATIC_ROOT để Nginx có thể phục vụ trực tiếp
+
+# Collect static files
+echo "Collecting static files..."
 python manage.py collectstatic --noinput
 
-# Khởi động Gunicorn phục vụ ứng dụng Django
-exec gunicorn BE_BLOG.wsgi:application \
-  --bind 0.0.0.0:${PORT} \
-  --workers ${WEB_CONCURRENCY} \
-  --timeout 120 \
-  --access-logfile - \
-  --error-logfile -
+# Check if running Celery worker
+if [ "$1" = "celery" ]; then
+    echo "Starting Celery worker..."
+    exec celery -A BE_BLOG worker --loglevel=info
+elif [ "$1" = "celery-beat" ]; then
+    echo "Starting Celery beat..."
+    exec celery -A BE_BLOG beat --loglevel=info
+else
+    # Start Gunicorn server
+    echo "Starting Gunicorn server..."
+    exec gunicorn BE_BLOG.wsgi:application \
+        --bind 0.0.0.0:${PORT} \
+        --workers ${WEB_CONCURRENCY} \
+        --timeout 120 \
+        --access-logfile - \
+        --error-logfile - \
+        --preload
+fi

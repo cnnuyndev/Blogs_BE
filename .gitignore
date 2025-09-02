@@ -4,7 +4,6 @@ __pycache__/
 # Virtual environments
 env/
 ENV/
-.env/
 .venv/
 
 # IDE
@@ -19,3 +18,4 @@ ENV/
 
 # Environment variables
 .env
+REDIS_CELERY_EXPLANATION.md

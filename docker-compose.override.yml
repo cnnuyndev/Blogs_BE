@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  web:
+    environment:
+      - DEBUG=True
+      - CELERY_TASK_ALWAYS_EAGER=True
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+
+  celery:
+    environment:
+      - DEBUG=True
+      - CELERY_TASK_ALWAYS_EAGER=True
+    volumes:
+      - .:/app
+    command: ["celery", "-A", "BE_BLOG", "worker", "--loglevel=debug"]
+
+  celery-beat:
+    environment:
+      - DEBUG=True
+      - CELERY_TASK_ALWAYS_EAGER=True
+    volumes:
+      - .:/app
+    command: ["celery", "-A", "BE_BLOG", "beat", "--loglevel=debug"]
+
+  nginx:
+    ports:
+      - "80:80"

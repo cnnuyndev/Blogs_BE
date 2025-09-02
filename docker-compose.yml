@@ -8,6 +8,7 @@ services:
       - redis_data:/data # Lưu dữ liệu Redis ra volume
     networks:
       - app_net # Cùng network để service khác truy cập bằng tên "redis"
+    restart: unless-stopped
 
   web:
     build: . # Build image từ Dockerfile hiện tại
@@ -21,6 +22,8 @@ services:
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/1} # Trỏ tới service redis trong cùng network
       - STATIC_ROOT=/static # STATIC_ROOT trỏ đến volume /static
       - MEDIA_ROOT=/media # MEDIA_ROOT trỏ đến volume /media
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/1}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
     volumes:
       - static_data:/static # Nơi collectstatic sẽ đẩy file tĩnh
       - media_data:/media # Nơi Django lưu uploads
@@ -29,6 +32,45 @@ services:
       - redis # Chờ redis khởi động trước (theo thứ tự)
     networks:
       - app_net # Cho phép gọi "web:8000" từ Nginx
+    restart: unless-stopped
+
+  celery:
+    build: .
+    command: ["celery", "-A", "BE_BLOG", "worker", "--loglevel=info"]
+    env_file:
+      - .env
+    environment:
+      - DEBUG=${DEBUG:-False}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/1}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/1}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+      - web
+    networks:
+      - app_net
+    restart: unless-stopped
+
+  celery-beat:
+    build: .
+    command: ["celery", "-A", "BE_BLOG", "beat", "--loglevel=info"]
+    env_file:
+      - .env
+    environment:
+      - DEBUG=${DEBUG:-False}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/1}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://redis:6379/1}
+      - CELERY_RESULT_BACKEND=${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+      - web
+    networks:
+      - app_net
+    restart: unless-stopped
 
   nginx:
     image: nginx:1.27-alpine # Nginx nhẹ, ổn định
@@ -42,6 +84,7 @@ services:
       - media_data:/media:ro # Cho Nginx đọc media trực tiếp
     networks:
       - app_net # Giao tiếp nội bộ tới service web
+    restart: unless-stopped
 
 volumes:
   redis_data: # Lưu dữ liệu Redis bền vững
